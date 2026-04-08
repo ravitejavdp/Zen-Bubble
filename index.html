@@ -570,7 +570,7 @@ alert("Script is running!");
         }
 
         window.addEventListener('mousedown', handlePop);
-        window.addEventListener('touchstart', (e) => { handlePop(e); e.preventDefault(); }, {passive: false});
+        window.addEventListener('touchstart', (e) => { handlePop(e); }, {passive: false});
         window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
     </script>
 </body>
