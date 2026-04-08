@@ -138,8 +138,12 @@
         const gameOverScreen = document.getElementById('game-over');
         const overlay = document.getElementById('overlay');
 
+            function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        }
+        window.addEventListener('load', resizeCanvas);
+        window.addEventListener('resize', resizeCanvas);
 
         let bubbles = [], particles = [], scoreTexts = [], windTrails = [];
         let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
@@ -152,7 +156,7 @@
 
         // --- AUDIO ENGINE ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function initLoFiEngine() {
+       /* function initLoFiEngine() {
             const bufferSize = 2 * audioCtx.sampleRate,
             noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate),
             output = noiseBuffer.getChannelData(0);
@@ -202,7 +206,7 @@
             }
             playBeat();
         }
-
+*/
         function playPopSound(type) {
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
@@ -540,7 +544,7 @@
 
         function startGame() {
             audioCtx.resume();
-            initLoFiEngine();
+            //initLoFiEngine();
             overlay.style.display = 'none';
             gameActive = true;
             bubbles = Array.from({length: 18}, () => new Bubble());
