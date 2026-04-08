@@ -1,0 +1,11 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "ravitejavdp.github",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "ravitejavdp.github",
+  "start_url": "https://ravitejavdp.github.io/Zen-Bubble/",
+  "theme_color": "#ffffff"
+}
