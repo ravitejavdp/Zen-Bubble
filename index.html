@@ -138,6 +138,13 @@
         const gameOverScreen = document.getElementById('game-over');
         const overlay = document.getElementById('overlay');
 
+        window.onload = () => {
+    // Force a resize when the window is fully ready
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    console.log("Canvas initialized: " + canvas.width + "x" + canvas.height);
+};
+        
             function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
