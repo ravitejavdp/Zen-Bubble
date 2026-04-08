@@ -7,5 +7,6 @@
   "scope": "/",
   "short_name": "ravitejavdp.github",
   "start_url": "./index.html",
-  "theme_color": "#ffffff"
+  "theme_color": "#ffffff",
+  "icon":"./icon.jpg"
 }
