@@ -569,9 +569,17 @@ alert("Script is running!");
             animate();
         }
 
-        window.addEventListener('mousedown', handlePop);
-        window.addEventListener('touchstart', (e) => { handlePop(e); }, {passive: false});
-        window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+        // Remove your old listeners and replace with this:
+window.addEventListener('mousedown', (e) => {
+    if (e.target.tagName === 'BUTTON') return; // Don't interfere with buttons
+    handlePop(e);
+});
+
+window.addEventListener('touchstart', (e) => {
+    if (e.target.tagName === 'BUTTON') return; // Let the button handle its own click
+    handlePop(e);
+    // Remove e.preventDefault() here unless you specifically need it to stop scrolling
+}, {passive: true});
     </script>
 </body>
 </html>
