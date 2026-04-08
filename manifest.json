@@ -6,6 +6,6 @@
   "orientation": "any",
   "scope": "/",
   "short_name": "ravitejavdp.github",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "theme_color": "#ffffff"
 }
