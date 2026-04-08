@@ -6,6 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ZenBath Pro - Fan Edition</title>
     <style>
+        * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none; /* Prevents the browser from taking over your taps */
+}
+
+/* Re-enable for the button specifically */
+button {
+    touch-action: auto;
+    -webkit-user-select: auto;
+}
         body { 
             margin: 0; overflow: hidden; 
             background: radial-gradient(circle at center, #1a2a6c, #b21f1f, #fdbb2d); 
@@ -95,7 +108,7 @@
     <div id="overlay">
         <h1 style="letter-spacing: 5px;">ZENBATH LO-FI</h1>
         <p>Vibe with the bubbles. Fan at LVL 2. Hunter at LVL 5.</p>
-        <button onclick="startGame()">START VIBING</button>
+        <button onpointerdown="startGame()">START VIBING</button>
     </div>
     <div id="meter-vessel"><div id="timer-bar-fill"></div></div>
 
@@ -551,7 +564,6 @@ alert("Script is running!");
         }
 
         function startGame() {
-            audioCtx.resume();
             //initLoFiEngine();
             overlay.style.display = 'none';
             gameActive = true;
