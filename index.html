@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ZenBath Pro - Fan Edition</title>
     <style>
+         * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none; /* Prevents the browser from taking over your taps */
+}
         body { 
             margin: 0; overflow: hidden;
             background: radial-gradient(circle at center, #1a2a6c, #b21f1f, #fdbb2d); 
@@ -245,7 +252,7 @@
                 this.active = false;
             }
             update() {
-                if (currentLevel >= 2) {
+                if (currentLevel >= 1) {
                     this.active = true;
                     // Slide in
                     if (this.x > this.targetX) this.x -= 2;
@@ -404,10 +411,16 @@
                 this.y -= this.speed;
                 
                 // Wind Physics (Level 2+)
-                if (currentLevel >= 2) {
-                    let windStrength = (currentLevel - 1) * 0.04;
-                    this.vx -= windStrength; // Accelerate left
-                    this.x += this.vx;
+                if (currentLevel >= 1) {
+                    let windStrength = (currentLevel+1 - 1) * 0.04;
+                    
+                    // Pull bubbles vertically toward the fan's height (center stream)
+                   // this.y += (fan.y - this.y) * 0.025;
+                    // Apply horizontal wind only when bubble is at or above fan's y position
+                    if (this.y <= fan.y) {
+                        this.vx -= windStrength; // Accelerate left
+                        this.x += this.vx;
+                    }
                 }
 
                 this.x += Math.sin(this.y / 60) * 0.5;
