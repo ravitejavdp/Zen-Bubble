@@ -1,12 +1,564 @@
-const gameOverScreen = document.getElementById('game-over');
-const overlay = document.getElementById('overlay');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ZenBath Pro - Fan Edition</title>
+    <style>
+        body { 
+            margin: 0; overflow: hidden; 
+            background: radial-gradient(circle at center, #1a2a6c, #b21f1f, #fdbb2d); 
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            font-family: 'Segoe UI', sans-serif; touch-action: none; 
+        }
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        canvas { display: block; }
+        
+        #meter-vessel {
+            width: 100%; height: 4px; background: rgba(255, 255, 255, 0.1);
+            position: absolute; top: 0; left: 0; z-index: 10;
+        }
+        #timer-bar-fill {
+            height: 100%; width: 100%; 
+            background: linear-gradient(90deg, #4ecca3, #bbffaa, #4ecca3);
+            background-size: 200% auto; animation: flow 3s linear infinite;
+            transition: width 0.2s linear;
+        }
 
-            window.onload = () => {
-    // Force a resize when the window is fully ready
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    console.log("Canvas initialized: " + canvas.width + "x" + canvas.height);
-};
+        #ui-top { 
+            position: absolute; top: 12px; left: 0; right: 0; 
+            display: flex; justify-content: center; pointer-events: none; z-index: 5;
+        }
+        .stats-row { 
+            width: 92%; max-width: 500px; display: flex; justify-content: space-between; align-items: center; 
+        }
 
-let bubbles = [], particles = [], scoreTexts = [], windTrails = [];
-let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
+        .mini-stat {
+            color: #ffffff; font-weight: bold; font-size: 13px; 
+            background: rgba(0, 0, 0, 0.4); padding: 5px 12px; 
+            border-radius: 10px; backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.15);
+            display: flex; align-items: center; gap: 6px;
+        }
+        .stat-label { font-size: 9px; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        #multiplier-display {
+            font-size: 34px; font-weight: 900; color: #ffffff;
+            text-shadow: 0 2px 15px rgba(0,0,0,0.4);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .active-streak { color: #fff !important; text-shadow: 0 0 25px #00f2ff, 0 0 10px #00f2ff !important; transform: scale(1.25); }
+
+        #level-tag {
+            position: absolute; bottom: 15px; right: 15px;
+            background: rgba(0,0,0,0.5); color: white;
+            padding: 4px 10px; border-radius: 8px; font-size: 10px;
+            backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.1);
+            font-weight: bold; letter-spacing: 1px;
+        }
+
+        @keyframes flow {
+            0% { background-position: 0% center; }
+            100% { background-position: 200% center; }
+        }
+
+        #level-up-msg {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            color: white; font-size: 50px; font-weight: 900; opacity: 0;
+            pointer-events: none; transition: opacity 0.4s;
+            text-shadow: 0 0 30px rgba(253, 187, 45, 0.8);
+        }
+
+        #overlay, #game-over {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: white; z-index: 100; backdrop-filter: blur(10px);
+        }
+        #game-over { display: none; }
+        
+        button {
+            margin-top: 25px; padding: 15px 50px; border: none; border-radius: 50px;
+            background: #ffffff; color: #b21f1f; font-weight: 900; cursor: pointer;
+            font-size: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+        }
+        button:active { transform: scale(0.95); }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <h1 style="letter-spacing: 5px;">ZENBATH LO-FI</h1>
+        <p>Vibe with the bubbles. Fan at LVL 2. Hunter at LVL 5.</p>
+        <button onclick="startGame()">START VIBING</button>
+    </div>
+    <div id="meter-vessel"><div id="timer-bar-fill"></div></div>
+
+    <div id="ui-top">
+        <div class="stats-row">
+            <div class="mini-stat">
+                <span class="stat-label">Best</span>
+                <span id="best-val">0</span>
+            </div>
+            
+            <div id="multiplier-display">1x</div>
+            
+            <div class="mini-stat">
+                <span class="stat-label">Score</span>
+                <span id="pop-count">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="level-tag">Level <span id="level-val">1</span></div>
+    <div id="level-up-msg">Level Up!!</div>
+
+    <div id="game-over">
+        <h1 style="letter-spacing: 5px;">GAME OVER</h1>
+        <p>Final Score: <span id="final-score" style="font-size: 24px; color: #fdbb2d;">0</span></p>
+        <p id="new-record-msg" style="color: #4ecca3; display: none; font-weight: bold;">NEW RECORD!</p>
+        <button onclick="resetGame()">RESTART</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const popDisplay = document.getElementById('pop-count');
+        const bestDisplay = document.getElementById('best-val');
+        const levelDisplay = document.getElementById('level-val');
+        const multDisplay = document.getElementById('multiplier-display');
+        const timerFill = document.getElementById('timer-bar-fill');
+        const gameOverScreen = document.getElementById('game-over');
+        const overlay = document.getElementById('overlay');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let bubbles = [], particles = [], scoreTexts = [], windTrails = [];
+        let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
+        let streakMultiplier = 1, zenMeter = 100, gameActive = false, drainRate = 0.12;
+        
+        let bestScore = localStorage.getItem('zenBathBestScore') || 0;
+        bestDisplay.innerText = Number(bestScore).toLocaleString();
+
+        const bubbleColors = ['#a1c4fd', '#c2e9fb', '#d4fc79', '#96e6a1', '#84fab0', '#e0c3fc'];
+
+        // --- AUDIO ENGINE ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function initLoFiEngine() {
+            const bufferSize = 2 * audioCtx.sampleRate,
+            noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate),
+            output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = (Math.random() * 2 - 1) * 0.015;
+                if (Math.random() > 0.999) output[i] = Math.random() * 0.1;
+            }
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = noiseBuffer;
+            noise.loop = true;
+            const noiseFilter = audioCtx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.value = 3000;
+            noise.connect(noiseFilter);
+            noiseFilter.connect(audioCtx.destination);
+            noise.start();
+
+            function playBeat() {
+                if (!gameActive) return;
+                const now = audioCtx.currentTime;
+                const kick = audioCtx.createOscillator();
+                const kickGain = audioCtx.createGain();
+                kick.frequency.setValueAtTime(100, now);
+                kick.frequency.exponentialRampToValueAtTime(0.01, now + 0.1);
+                kickGain.gain.setValueAtTime(0.15, now);
+                kickGain.gain.linearRampToValueAtTime(0, now + 0.2);
+                kick.connect(kickGain);
+                kickGain.connect(audioCtx.destination);
+                kick.start(); kick.stop(now + 0.2);
+
+                const notes = [261.63, 293.66, 329.63, 392.00, 440.00];
+                const piano = audioCtx.createOscillator();
+                const pGain = audioCtx.createGain();
+                const pFilter = audioCtx.createBiquadFilter();
+                piano.type = 'triangle';
+                piano.frequency.setValueAtTime(notes[Math.floor(Math.random()*notes.length)], now);
+                pFilter.type = 'lowpass';
+                pFilter.frequency.value = 800;
+                pGain.gain.setValueAtTime(0, now);
+                pGain.gain.linearRampToValueAtTime(0.06, now + 0.1);
+                pGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+                piano.connect(pFilter);
+                pFilter.connect(pGain);
+                pGain.connect(audioCtx.destination);
+                piano.start(); piano.stop(now + 1.6);
+                setTimeout(playBeat, 850);
+            }
+            playBeat();
+        }
+
+        function playPopSound(type) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            if (type === 'special') {
+                osc.frequency.setValueAtTime(783.99, now);
+                osc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+            } else if (type === 'trash') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(100, now);
+                gain.gain.setValueAtTime(0.2, now);
+            } else {
+                osc.frequency.setValueAtTime(523.25, now);
+                gain.gain.setValueAtTime(0.1, now);
+            }
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            osc.start(); osc.stop(now + 0.2);
+        }
+
+        // --- NEW: TABLE FAN CLASS ---
+        class TableFan {
+            constructor() {
+                this.x = canvas.width + 100;
+                this.targetX = canvas.width - 60;
+                this.y = canvas.height * 0.5;
+                this.rotation = 0;
+                this.active = false;
+            }
+            update() {
+                if (currentLevel >= 2) {
+                    this.active = true;
+                    // Slide in
+                    if (this.x > this.targetX) this.x -= 2;
+                    // Rotate blades based on level
+                    this.rotation += 0.1 + (currentLevel * 0.05);
+
+                    // Spawn visual wind trails
+                    if (Math.random() < 0.15) {
+                        windTrails.push({
+                            x: this.x - 40,
+                            y: this.y + (Math.random() - 0.5) * 120,
+                            len: 40 + Math.random() * 100,
+                            alpha: 0.4
+                        });
+                    }
+                }
+            }
+            draw() {
+                if (!this.active) return;
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Stand
+                ctx.fillStyle = '#444';
+                ctx.fillRect(-10, 40, 20, 60);
+                ctx.fillRect(-30, 90, 60, 10);
+
+                // Cage
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, 60, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Blades
+                ctx.rotate(this.rotation);
+                ctx.fillStyle = '#666';
+                for(let i=0; i<3; i++) {
+                    ctx.beginPath();
+                    ctx.ellipse(0, 25, 12, 35, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.rotate((Math.PI * 2) / 3);
+                }
+                ctx.restore();
+            }
+        }
+
+        const fan = new TableFan();
+
+        // --- LIZARD CLASS ---
+        class Lizard {
+            constructor() {
+                this.x = -100; this.y = 300;
+                this.targetY = 300;
+                this.state = 'idle'; 
+                this.tongueLen = 0;
+                this.targetBubble = null;
+                this.bodyColor = '#4a7c44';
+            }
+             update() {
+                if (currentLevel < 5) return;
+                
+                // Show lizard on wall
+                this.x = Math.min(this.x + 2, 20);
+
+                if (this.state === 'idle') {
+                    // Wander on wall
+                    this.y += (this.targetY - this.y) * 0.02;
+                    if (Math.abs(this.y - this.targetY) < 10) this.targetY = Math.random() * (canvas.height - 200) + 100;
+
+                    // Hunter logic
+                    if (Math.random() < 0.015) {
+                        // Find closest bubble in front of it
+                        const targets = bubbles.filter(b =>  b.rarity !== 'trash');
+                        if (targets.length > 0) {
+                            this.targetBubble = targets[Math.floor(Math.random() * targets.length)];
+                            this.state = 'attacking';
+                        }
+                    }
+                }
+                if (this.state === 'attacking') {
+                    let dx = this.targetBubble.x - this.x;
+                    let dy = this.targetBubble.y - this.y;
+                    let dist = Math.hypot(dx, dy);
+                    this.tongueLen += 12;
+
+                    if (this.tongueLen >= dist) {
+                        this.targetBubble.reset();
+                        playPopSound('trash'); // Lizard steal sound
+                        this.state = 'returning';
+                    }
+                }
+
+                if (this.state === 'returning') {
+                    this.tongueLen -= 15;
+                    if (this.tongueLen <= 0) {
+                        this.tongueLen = 0;
+                        this.state = 'idle';
+                    }
+                }
+            }
+            draw() {
+                if (currentLevel < 5) return;
+
+                // Draw Tongue
+                if (this.tongueLen > 0 && this.targetBubble) {
+                    ctx.strokeStyle = '#ff7b7b';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + 30, this.y);
+                    let angle = Math.atan2(this.targetBubble.y - this.y, this.targetBubble.x - this.x);
+                    ctx.lineTo(this.x + 30 + Math.cos(angle) * this.tongueLen, this.y + Math.sin(angle) * this.tongueLen);
+                    ctx.stroke();
+                }
+
+                // Draw Lizard
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(Math.sin(Date.now() * 0.005) * 0.1);
+                ctx.fillStyle = this.bodyColor;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 40, 18, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Head
+                ctx.beginPath();
+                ctx.arc(35, -5, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(40, -8, 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        const hunter = new Lizard();
+
+        // --- BUBBLE & PARTICLE CLASSES ---
+        class Bubble {
+            constructor() { this.reset(); this.y = Math.random() * canvas.height; }
+            reset() {
+                this.radius = Math.random() * 20 + 22;
+                this.x = Math.random() * (canvas.width - 150) + 50;
+                this.y = canvas.height + this.radius + Math.random() * 100;
+                this.speed = (Math.random() * 0.8 + 0.5) * speedMultiplier;
+                this.vx = 0; // Horizontal velocity
+                this.wobbleAngle = Math.random() * Math.PI * 2;
+                this.orbitAngle = Math.random() * Math.PI * 2;
+                const rand = Math.random();
+                if (rand < 0.03) { this.rarity = 'diamond'; this.color = '#ffffff'; this.points = 50;this.orbiters = 2; }
+                else if (rand < 0.10) { this.rarity = 'gold'; this.color = '#FFD700'; this.points = 25; this.orbiters = 3; }
+                else if (rand < 0.28) { this.rarity = 'trash'; this.color = '#3e2723'; this.points = -100; this.radius = 35; }
+                else { this.rarity = 'normal'; this.color = bubbleColors[Math.floor(Math.random() * bubbleColors.length)]; this.points = 5; }
+            }
+            update() {
+                this.y -= this.speed;
+                
+                // Wind Physics (Level 2+)
+                if (currentLevel >= 2) {
+                    let windStrength = (currentLevel - 1) * 0.04;
+                    this.vx -= windStrength; // Accelerate left
+                    this.x += this.vx;
+                }
+
+                this.x += Math.sin(this.y / 60) * 0.5;
+                this.wobbleAngle += 0.02; this.orbitAngle += 0.05;
+                if (this.y < -this.radius || this.x < -this.radius) this.reset();
+            }
+             draw() {
+                ctx.save();
+                let r = this.radius;
+                if (this.rarity !== 'normal' && this.rarity !== 'trash') {
+                    r += Math.sin(this.wobbleAngle) * 2;
+                    ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+                    for (let i = 0; i < this.orbiters; i++) {
+                        let a = this.orbitAngle + (i * (Math.PI * 2 / this.orbiters));
+                        let ox = this.x + Math.cos(a) * (this.radius + 18);
+                        let oy = this.y + Math.sin(a) * (this.radius + 18);
+                        ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(ox, oy, 3, 0, Math.PI*2); ctx.fill();
+                    }
+                }
+                ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+                let grad = ctx.createRadialGradient(this.x - r/3, this.y - r/3, 0, this.x, this.y, r);
+                if (this.rarity === 'trash') {
+                    grad.addColorStop(0, '#8d6e63');
+                    grad.addColorStop(1, '#3e2723');
+                    ctx.fillStyle = grad;
+                    ctx.fill();
+                    // Trash "Dirt" Inside
+                    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                    ctx.fillRect(this.x - 5, this.y - 5, 4, 4);
+                    ctx.fillRect(this.x + 6, this.y + 2, 3, 3);
+                    }
+                else { grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, this.color + 'aa'); 
+                        ctx.fillStyle = grad; ctx.fill();}
+                
+                 ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y; this.color = color;
+                this.size = Math.random() * 4 + 1;
+                this.vx = (Math.random() - 0.5) * 10;
+                this.vy = (Math.random() - 0.5) * 10;
+                this.life = 1.0;
+            }
+            update() { this.x += this.vx; this.y += this.vy; this.life -= 0.03; }
+            draw() {
+                ctx.save(); ctx.globalAlpha = this.life; ctx.fillStyle = this.color;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+            }
+        }
+
+        class ScoreText {
+            constructor(x, y, text, color) { this.x = x; this.y = y; this.text = text; this.color = color; this.life = 1.0; }
+            update() { this.y -= 1; this.life -= 0.02; }
+            draw() {
+                ctx.save(); ctx.globalAlpha = this.life; ctx.fillStyle = this.color;
+                ctx.font = "bold 28px Segoe UI"; ctx.textAlign = "center"; 
+                ctx.fillText(this.text, this.x, this.y); ctx.restore();
+            }
+        }
+
+        // --- GAME LOOP ---
+        function handlePop(e) {
+            if (!gameActive) return;
+            const x = e.clientX || (e.touches && e.touches[0].clientX);
+            const y = e.clientY || (e.touches && e.touches[0].clientY);
+
+            bubbles.forEach((b) => {
+                if (Math.hypot(x - b.x, y - b.y) < b.radius + 15) {
+                    if (b.rarity === 'trash') playPopSound('trash');
+                    else if (b.rarity === 'normal') playPopSound('normal');
+                    else playPopSound('special');
+
+                    if (b.rarity === 'normal') { streakMultiplier = 1; multDisplay.classList.remove('active-streak'); }
+                    else if (b.rarity === 'trash') { streakMultiplier = 1; zenMeter -= 25; multDisplay.classList.remove('active-streak'); }
+                    else { streakMultiplier *= 2; multDisplay.classList.add('active-streak'); }
+
+                    multDisplay.innerText = streakMultiplier + "x";
+                    const pts = b.rarity === 'trash' ? b.points : (b.points * streakMultiplier);
+                    totalScore = Math.max(0, totalScore + pts);
+                    popDisplay.innerText = totalScore.toLocaleString();
+                    scoreTexts.push(new ScoreText(b.x, b.y - 30, (pts >= 0 ? "+" : "") + pts, b.color));
+                    
+                    if (b.rarity !== 'trash') zenMeter = Math.min(100, zenMeter + (b.rarity === 'diamond' ? 40 : 12));
+                    for (let i = 0; i < 15; i++) particles.push(new Particle(b.x, b.y, b.color));
+                    
+                    let targetLevel = Math.floor(totalScore / 1000) + 1;
+                    if (targetLevel > currentLevel) {
+                        currentLevel = targetLevel; speedMultiplier += 0.2; drainRate += 0.04;
+                        levelDisplay.innerText = currentLevel;
+                        const msg = document.getElementById('level-up-msg');
+                        msg.style.opacity = '1'; setTimeout(() => msg.style.opacity = '0', 1200);
+                    }
+                    b.reset();
+                }
+            });
+        }
+
+        function animate() {
+            if (!gameActive) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            zenMeter -= drainRate;
+            timerFill.style.width = Math.max(0, zenMeter) + '%';
+            if (zenMeter <= 0) { endGame(); return; }
+
+            // Update Air Trails
+            for(let i = windTrails.length - 1; i >= 0; i--) {
+                let w = windTrails[i];
+                w.x -= 8 + (currentLevel * 2);
+                w.alpha -= 0.01;
+                if (w.alpha <= 0 || w.x < -100) { windTrails.splice(i, 1); continue; }
+                ctx.strokeStyle = `rgba(255,255,255,${w.alpha})`;
+                ctx.beginPath(); ctx.moveTo(w.x, w.y); ctx.lineTo(w.x + w.len, w.y); ctx.stroke();
+            }
+
+            fan.update();
+            fan.draw();
+            hunter.update();
+            hunter.draw();
+            bubbles.forEach(b => { b.update(); b.draw(); });
+            particles.forEach((p, i) => { p.update(); p.draw(); if (p.life <= 0) particles.splice(i, 1); });
+            scoreTexts.forEach((st, i) => { st.update(); st.draw(); if (st.life <= 0) scoreTexts.splice(i, 1); });
+            requestAnimationFrame(animate);
+        }
+
+         function endGame() {
+            gameActive = false;
+            document.getElementById('final-score').innerText = totalScore.toLocaleString();
+            const recordMsg = document.getElementById('new-record-msg');
+            if (totalScore > bestScore) {
+                bestScore = totalScore;
+                localStorage.setItem('zenBathBestScore', bestScore);
+                bestDisplay.innerText = totalScore.toLocaleString();
+                recordMsg.style.display = 'block';
+            } else { recordMsg.style.display = 'none'; }
+            gameOverScreen.style.display = 'flex';
+        }
+
+        function startGame() {
+            audioCtx.resume();
+            initLoFiEngine();
+            overlay.style.display = 'none';
+            gameActive = true;
+            bubbles = Array.from({length: 18}, () => new Bubble());
+            animate();
+        }
+
+        function resetGame() {
+            totalScore = 0; currentLevel = 1; speedMultiplier = 1; streakMultiplier = 1; zenMeter = 100;
+            gameActive = true; popDisplay.innerText = "0"; levelDisplay.innerText = "1"; multDisplay.innerText = "1x";
+            gameOverScreen.style.display = 'none';
+            fan.x = canvas.width + 100; fan.active = false;
+            hunter.x = -100;
+            bubbles.forEach(b => b.reset());
+            animate();
+        }
+
+        window.addEventListener('mousedown', handlePop);
+        window.addEventListener('touchstart', (e) => { handlePop(e); e.preventDefault(); }, {passive: false});
+        window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+    </script>
+</body>
+</html>
