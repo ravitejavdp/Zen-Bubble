@@ -19,19 +19,67 @@ button {
     touch-action: auto;
     -webkit-user-select: auto;
 }
-        body { 
-            margin: 0; overflow: hidden; 
-            background: radial-gradient(circle at center, #1a2a6c, #b21f1f, #fdbb2d); 
-            background-size: 400% 400%;
-            animation: gradientBG 15s ease infinite;
-            font-family: 'Segoe UI', sans-serif; touch-action: none; 
-        }
+        /* Reset for total consistency */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+}
+
+canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh; /* Dynamic Viewport Height - Fixes mobile bar issue */
+}
+
+/* Unified Responsive Overlay */
+#overlay, #game-over {
+    position: fixed;
+    inset: 0;
+    display: none; /* Controlled by JS */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 1000;
+    padding: 20px;
+    text-align: center;
+}
+
+/* Only show overlay if it's the start */
+#overlay { display: flex; }
+
+button {
+    all: unset; /* Clear defaults */
+    margin-top: 2rem;
+    padding: 1rem 3rem;
+    background: #fff;
+    color: #b21f1f;
+    border-radius: 50px;
+    font-weight: 900;
+    font-size: 1.25rem;
+    cursor: pointer;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+       
         @keyframes gradientBG {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
-        canvas { display: block; }
+        
         
         #meter-vessel {
             width: 100%; height: 4px; background: rgba(255, 255, 255, 0.1);
@@ -88,19 +136,10 @@ button {
             text-shadow: 0 0 30px rgba(253, 187, 45, 0.8);
         }
 
-        #overlay, #game-over {
-            position: absolute; inset: 0; background: rgba(0,0,0,0.85);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            color: white; z-index: 100; backdrop-filter: blur(10px);
-        }
+       
         #game-over { display: none; }
         
-        button {
-            margin-top: 25px; padding: 15px 50px; border: none; border-radius: 50px;
-            background: #ffffff; color: #b21f1f; font-weight: 900; cursor: pointer;
-            font-size: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            transition: transform 0.2s;
-        }
+       
         button:active { transform: scale(0.95); }
     </style>
 </head>
@@ -141,6 +180,12 @@ button {
     <canvas id="gameCanvas"></canvas>
 
     <script>
+           window.onload = () => {
+    // Force a resize when the window is fully ready
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    console.log("Canvas initialized: " + canvas.width + "x" + canvas.height);
+};
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const popDisplay = document.getElementById('pop-count');
@@ -151,12 +196,7 @@ button {
         const gameOverScreen = document.getElementById('game-over');
         const overlay = document.getElementById('overlay');
 
-            window.onload = () => {
-    // Force a resize when the window is fully ready
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    console.log("Canvas initialized: " + canvas.width + "x" + canvas.height);
-};
+         
 
         let bubbles = [], particles = [], scoreTexts = [], windTrails = [];
         let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
