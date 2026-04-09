@@ -200,7 +200,7 @@
 
         let bubbles = [], particles = [], scoreTexts = [], windTrails = [], comboCount = 0, lastPopTime = 0, isMouseDown = false;
         let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
-        let streakMultiplier = 1, zenMeter = 100, gameActive = false, drainRate = 0.12;
+        let streakMultiplier = 1, zenMeter = 100, gameActive = false, drainRate = 0.06;
         
         let bestScore = localStorage.getItem('zenBathBestScore') || 0;
         bestDisplay.innerText = Number(bestScore).toLocaleString();
@@ -568,7 +568,7 @@
                     
                     let targetLevel = Math.floor(totalScore / 1000) + 1;
                     if (targetLevel > currentLevel) {
-                        currentLevel = targetLevel; speedMultiplier += 0.2; drainRate += 0.04;
+                        currentLevel = targetLevel; speedMultiplier += 0.2; drainRate += 0.02;
                         levelDisplay.innerText = currentLevel;
                         const msg = document.getElementById('level-up-msg');
                         msg.style.opacity = '1'; setTimeout(() => msg.style.opacity = '0', 1200);
@@ -652,7 +652,7 @@
         }
 
         function resetGame() {
-            totalScore = 0; currentLevel = 1; speedMultiplier = 1; streakMultiplier = 1; zenMeter = 100; comboCount = 0; lastPopTime = 0;
+            totalScore = 0; currentLevel = 1; speedMultiplier = 1; streakMultiplier = 1; zenMeter = 100; comboCount = 0; lastPopTime = 0; drainRate = 0.06;
             gameActive = true; popDisplay.innerText = "0"; levelDisplay.innerText = "1"; multDisplay.innerText = "1x";
             gameOverScreen.style.display = 'none';
             timerFill.classList.remove('warning', 'critical');
