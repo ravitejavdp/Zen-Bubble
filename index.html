@@ -9,15 +9,14 @@
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
-    user-select: none;
-    touch-action: none; /* Prevents the browser from taking over your taps */
+    user-select: none; 
 }
         body { 
             margin: 0; overflow: hidden;
             background: radial-gradient(circle at center, #1a2a6c, #b21f1f, #fdbb2d); 
             background-size: 400% 400%;
             animation: gradientBG 15s ease infinite;
-            font-family: 'Segoe UI', sans-serif; touch-action: none; 
+            font-family: 'Segoe UI', sans-serif;
         }
         @keyframes gradientBG {
             0% { background-position: 0% 50%; }
@@ -27,14 +26,35 @@
         canvas { display: block; touch-action: none; }
         
         #meter-vessel {
-            width: 100%; height: 4px; background: rgba(255, 255, 255, 0.1);
+            width: 100%; height: 12px; background: rgba(0, 0, 0, 0.4);
             position: absolute; top: 0; left: 0; z-index: 10;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
         #timer-bar-fill {
             height: 100%; width: 100%; 
             background: linear-gradient(90deg, #4ecca3, #bbffaa, #4ecca3);
             background-size: 200% auto; animation: flow 3s linear infinite;
             transition: width 0.2s linear;
+            box-shadow: 0 0 10px rgba(78, 204, 163, 0.5);
+        }
+        #timer-bar-fill.warning {
+            background: linear-gradient(90deg, #f09819, #edde5d, #f09819);
+            box-shadow: 0 0 10px rgba(240, 152, 25, 0.5);
+        }
+        #timer-bar-fill.critical {
+            background: linear-gradient(90deg, #cb2d3e, #ef473a, #cb2d3e);
+            animation: flow 0.8s linear infinite;
+            box-shadow: 0 0 15px rgba(239, 71, 58, 0.7);
+        }
+        .vibrate {
+            animation: vibrate-anim 0.1s infinite;
+        }
+        @keyframes vibrate-anim {
+            0% { transform: translate(0); }
+            25% { transform: translate(-1px, 1px); }
+            50% { transform: translate(1px, -1px); }
+            75% { transform: translate(-1px, -1px); }
+            100% { transform: translate(0); }
         }
 
         #ui-top { 
@@ -79,6 +99,25 @@
             color: white; font-size: 50px; font-weight: 900; opacity: 0;
             pointer-events: none; transition: opacity 0.4s;
             text-shadow: 0 0 30px rgba(253, 187, 45, 0.8);
+        }
+        @keyframes screen-shake-anim {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-3px, 3px); }
+            50% { transform: translate(3px, -3px); }
+            75% { transform: translate(-3px, -3px); }
+            100% { transform: translate(0, 0); }
+        }
+        .screen-shake {
+            animation: screen-shake-anim 0.15s ease-out;
+        }
+
+        @keyframes flash-anim {
+            0% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+            100% { filter: brightness(1); }
+        }
+        .flash-hit {
+            animation: flash-anim 0.2s ease-out;
         }
 
         #overlay, #game-over {
@@ -141,10 +180,11 @@
         const levelDisplay = document.getElementById('level-val');
         const multDisplay = document.getElementById('multiplier-display');
         const timerFill = document.getElementById('timer-bar-fill');
+        const meterVessel = document.getElementById('meter-vessel');
         const gameOverScreen = document.getElementById('game-over');
         const overlay = document.getElementById('overlay');
 
-        let cw, ch;
+        let cw, ch, lastHeartbeat = 0;
         function updateCanvasSize() {
             cw = canvas.width = window.innerWidth;
             ch = canvas.height = window.innerHeight;
@@ -158,7 +198,7 @@
             console.log("Canvas initialized: " + cw + "x" + ch);
         };
 
-        let bubbles = [], particles = [], scoreTexts = [], windTrails = [];
+        let bubbles = [], particles = [], scoreTexts = [], windTrails = [], comboCount = 0, lastPopTime = 0, isMouseDown = false;
         let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
         let streakMultiplier = 1, zenMeter = 100, gameActive = false, drainRate = 0.12;
         
@@ -169,57 +209,7 @@
 
         // --- AUDIO ENGINE ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function initLoFiEngine() {
-            const bufferSize = 2 * audioCtx.sampleRate,
-            noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate),
-            output = noiseBuffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) {
-                output[i] = (Math.random() * 2 - 1) * 0.015;
-                if (Math.random() > 0.999) output[i] = Math.random() * 0.1;
-            }
-            const noise = audioCtx.createBufferSource();
-            noise.buffer = noiseBuffer;
-            noise.loop = true;
-            const noiseFilter = audioCtx.createBiquadFilter();
-            noiseFilter.type = 'lowpass';
-            noiseFilter.frequency.value = 3000;
-            noise.connect(noiseFilter);
-            noiseFilter.connect(audioCtx.destination);
-            noise.start();
-
-            function playBeat() {
-                if (!gameActive) return;
-                const now = audioCtx.currentTime;
-                const kick = audioCtx.createOscillator();
-                const kickGain = audioCtx.createGain();
-                kick.frequency.setValueAtTime(100, now);
-                kick.frequency.exponentialRampToValueAtTime(0.01, now + 0.1);
-                kickGain.gain.setValueAtTime(0.15, now);
-                kickGain.gain.linearRampToValueAtTime(0, now + 0.2);
-                kick.connect(kickGain);
-                kickGain.connect(audioCtx.destination);
-                kick.start(); kick.stop(now + 0.2);
-
-                const notes = [261.63, 293.66, 329.63, 392.00, 440.00];
-                const piano = audioCtx.createOscillator();
-                const pGain = audioCtx.createGain();
-                const pFilter = audioCtx.createBiquadFilter();
-                piano.type = 'triangle';
-                piano.frequency.setValueAtTime(notes[Math.floor(Math.random()*notes.length)], now);
-                pFilter.type = 'lowpass';
-                pFilter.frequency.value = 800;
-                pGain.gain.setValueAtTime(0, now);
-                pGain.gain.linearRampToValueAtTime(0.06, now + 0.1);
-                pGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
-                piano.connect(pFilter);
-                pFilter.connect(pGain);
-                pGain.connect(audioCtx.destination);
-                piano.start(); piano.stop(now + 1.6);
-                setTimeout(playBeat, 850);
-            }
-            playBeat();
-        }
-
+      
         function playPopSound(type) {
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
@@ -240,6 +230,28 @@
             }
             gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
             osc.start(); osc.stop(now + 0.2);
+        }
+
+        function playHeartbeat() {
+            const now = audioCtx.currentTime;
+            // Low frequency "lub-dub" pulse
+            [0, 0.25].forEach(delay => {
+                const osc = audioCtx.createOscillator();
+                const g = audioCtx.createGain();
+                osc.frequency.setValueAtTime(60 - (delay * 40), now + delay);
+                osc.frequency.exponentialRampToValueAtTime(0.01, now + delay + 0.1);
+                g.gain.setValueAtTime(0.2, now + delay);
+                g.gain.linearRampToValueAtTime(0, now + delay + 0.15);
+                osc.connect(g); g.connect(audioCtx.destination);
+                osc.start(now + delay); osc.stop(now + delay + 0.15);
+            });
+        }
+
+        function triggerScreenShake() {
+            document.body.classList.add('screen-shake');
+            setTimeout(() => {
+                document.body.classList.remove('screen-shake');
+            }, 150); // Match animation duration
         }
 
         // --- NEW: TABLE FAN CLASS ---
@@ -342,6 +354,7 @@
                     if (this.tongueLen >= dist) {
                         this.targetBubble.reset();
                         playPopSound('trash'); // Lizard steal sound
+                        triggerScreenShake(); // Trigger screen shake
                         this.state = 'returning';
                     }
                 }
@@ -460,26 +473,37 @@
         }
 
         class Particle {
-            constructor(x, y, color) {
+            constructor(x, y, color, isTrail = false) {
                 this.x = x; this.y = y; this.color = color;
-                this.size = Math.random() * 4 + 1;
-                this.vx = (Math.random() - 0.5) * 10;
-                this.vy = (Math.random() - 0.5) * 10;
+                this.isTrail = isTrail;
+                this.size = isTrail ? 1.5 : Math.random() * 4 + 1;
+                this.vx = (Math.random() - 0.5) * (isTrail ? 2 : 10);
+                this.vy = (Math.random() - 0.5) * (isTrail ? 2 : 10);
                 this.life = 1.0;
             }
-            update() { this.x += this.vx; this.y += this.vy; this.life -= 0.03; }
+            update() { this.x += this.vx; this.y += this.vy; this.life -= (this.isTrail ? 0.05 : 0.03); }
             draw() {
-                ctx.save(); ctx.globalAlpha = this.life; ctx.fillStyle = this.color;
-                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+                ctx.save(); ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = this.color;
+                if (this.isTrail) {
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = this.color;
+                    // Texture: Small diamond/star shape for sparkles
+                    ctx.translate(this.x, this.y);
+                    ctx.rotate(Math.PI / 4);
+                    ctx.fillRect(-this.size, -this.size, this.size * 2, this.size * 2);
+                } else {
+                    ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.restore();
             }
         }
 
         class ScoreText {
-            constructor(x, y, text, color) { this.x = x; this.y = y; this.text = text; this.color = color; this.life = 1.0; }
+            constructor(x, y, text, color, size = 28) { this.x = x; this.y = y; this.text = text; this.color = color; this.size = size; this.life = 1.0; }
             update() { this.y -= 1; this.life -= 0.02; }
             draw() {
-                ctx.save(); ctx.globalAlpha = this.life; ctx.fillStyle = this.color;
-                ctx.font = "bold 28px Segoe UI"; ctx.textAlign = "center"; 
+                ctx.save(); ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = this.color;
+                ctx.font = "bold " + this.size + "px Segoe UI"; ctx.textAlign = "center"; 
                 ctx.fillText(this.text, this.x, this.y); ctx.restore();
             }
         }
@@ -490,23 +514,56 @@
             const x = e.clientX || (e.touches && e.touches[0].clientX);
             const y = e.clientY || (e.touches && e.touches[0].clientY);
 
+        // Visual Trail Effect: Spawn a subtle sparkle at the interaction point
+        if (x !== undefined && y !== undefined) {
+            particles.push(new Particle(x, y, '#e0ffff', true));
+        }
+
             bubbles.forEach((b) => {
                 if (Math.hypot(x - b.x, y - b.y) < b.radius + 15) {
                     if (b.rarity === 'trash') playPopSound('trash');
                     else if (b.rarity === 'normal') playPopSound('normal');
                     else playPopSound('special');
 
+                    // Combo Logic
+                    const now = Date.now();
+                    if (now - lastPopTime < 600) {
+                        comboCount++;
+                    } else {
+                        comboCount = 1;
+                    }
+                    lastPopTime = now;
+
+                    if (comboCount > 1) {
+                        scoreTexts.push(new ScoreText(x, y - 70, comboCount + "x COMBO", "#FFD700", 38));
+                    }
+
                     if (b.rarity === 'normal') { streakMultiplier = 1; multDisplay.classList.remove('active-streak'); }
                     else if (b.rarity === 'trash') { streakMultiplier = 1; zenMeter -= 25; multDisplay.classList.remove('active-streak'); }
                     else { streakMultiplier *= 2; multDisplay.classList.add('active-streak'); }
 
+                    // Trigger screen shake for trash bubbles
+                    if (b.rarity === 'trash') triggerScreenShake();
+
                     multDisplay.innerText = streakMultiplier + "x";
-                    const pts = b.rarity === 'trash' ? b.points : (b.points * streakMultiplier);
+                    
+                    let pts;
+                    if (b.rarity === 'trash') {
+                        pts = b.points; // Trash bubbles always give base negative points
+                    } else {
+                        pts = b.points * streakMultiplier * comboCount; // Apply both streak and combo multipliers
+                    }
                     totalScore = Math.max(0, totalScore + pts);
                     popDisplay.innerText = totalScore.toLocaleString();
                     scoreTexts.push(new ScoreText(b.x, b.y - 30, (pts >= 0 ? "+" : "") + pts, b.color));
                     
-                    if (b.rarity !== 'trash') zenMeter = Math.min(100, zenMeter + (b.rarity === 'diamond' ? 40 : 12));
+                    if (b.rarity !== 'trash') {
+                        zenMeter = Math.min(100, zenMeter + (b.rarity === 'diamond' ? 40 : 12));
+                        // Trigger background flash
+                        document.body.classList.remove('flash-hit');
+                        void document.body.offsetWidth; // Force reflow to restart animation
+                        document.body.classList.add('flash-hit');
+                    }
                     for (let i = 0; i < 15; i++) particles.push(new Particle(b.x, b.y, b.color));
                     
                     let targetLevel = Math.floor(totalScore / 1000) + 1;
@@ -526,6 +583,26 @@
             ctx.clearRect(0, 0, cw, ch);
             zenMeter -= drainRate;
             timerFill.style.width = Math.max(0, zenMeter) + '%';
+
+            // Update UI State based on timer
+            if (zenMeter < 40) {
+                timerFill.classList.add('critical');
+                timerFill.classList.remove('warning');
+                meterVessel.classList.add('vibrate');
+
+                if (audioCtx.currentTime - lastHeartbeat > 0.8) {
+                    playHeartbeat();
+                    lastHeartbeat = audioCtx.currentTime;
+                }
+            } else if (zenMeter < 50) {
+                timerFill.classList.add('warning');
+                timerFill.classList.remove('critical');
+                meterVessel.classList.remove('vibrate');
+            } else {
+                timerFill.classList.remove('warning', 'critical');
+                meterVessel.classList.remove('vibrate');
+            }
+
             if (zenMeter <= 0) { endGame(); return; }
 
             // Update Air Trails
@@ -543,8 +620,12 @@
             hunter.update();
             hunter.draw();
             bubbles.forEach(b => { b.update(); b.draw(); });
-            particles.forEach((p, i) => { p.update(); p.draw(); if (p.life <= 0) particles.splice(i, 1); });
-            scoreTexts.forEach((st, i) => { st.update(); st.draw(); if (st.life <= 0) scoreTexts.splice(i, 1); });
+            particles.forEach(p => p.update());
+            particles = particles.filter(p => p.life > 0);
+            particles.forEach(p => p.draw());
+            scoreTexts.forEach(st => st.update());
+            scoreTexts = scoreTexts.filter(st => st.life > 0);
+            scoreTexts.forEach(st => st.draw());
             requestAnimationFrame(animate);
         }
 
@@ -563,7 +644,7 @@
 
         function startGame() {
             audioCtx.resume();
-            initLoFiEngine();
+           // initLoFiEngine();
             overlay.style.display = 'none';
             gameActive = true;
             bubbles = Array.from({length: 18}, () => new Bubble());
@@ -571,9 +652,11 @@
         }
 
         function resetGame() {
-            totalScore = 0; currentLevel = 1; speedMultiplier = 1; streakMultiplier = 1; zenMeter = 100;
+            totalScore = 0; currentLevel = 1; speedMultiplier = 1; streakMultiplier = 1; zenMeter = 100; comboCount = 0; lastPopTime = 0;
             gameActive = true; popDisplay.innerText = "0"; levelDisplay.innerText = "1"; multDisplay.innerText = "1x";
             gameOverScreen.style.display = 'none';
+            timerFill.classList.remove('warning', 'critical');
+            meterVessel.classList.remove('vibrate');
             fan.x = cw + 100; fan.active = false;
             hunter.x = -100;
             bubbles.forEach(b => b.reset());
@@ -581,15 +664,29 @@
         }
 
         window.addEventListener('mousedown', (e) => {
-    if (e.target.tagName === 'BUTTON') return; // Don't interfere with buttons
-    handlePop(e);
-});
+            if (e.target.tagName === 'BUTTON') return;
+            isMouseDown = true;
+            handlePop(e);
+        });
 
-window.addEventListener('touchstart', (e) => {
-    if (e.target.tagName === 'BUTTON') return; // Let the button handle its own click
-    handlePop(e);
-    // Remove e.preventDefault() here unless you specifically need it to stop scrolling
-}, {passive: true});
+        window.addEventListener('mousemove', (e) => {
+            if (isMouseDown) handlePop(e);
+        });
+
+        window.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        window.addEventListener('touchstart', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            handlePop(e);
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            handlePop(e);
+        }, { passive: true });
+
         window.addEventListener('resize', updateCanvasSize);
     </script>
 </body>
