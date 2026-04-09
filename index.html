@@ -151,12 +151,12 @@ button {
         const gameOverScreen = document.getElementById('game-over');
         const overlay = document.getElementById('overlay');
 
-             function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        }
-        window.addEventListener('load', resizeCanvas);
-        window.addEventListener('resize', resizeCanvas);
+            window.onload = () => {
+    // Force a resize when the window is fully ready
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    console.log("Canvas initialized: " + canvas.width + "x" + canvas.height);
+};
 
         let bubbles = [], particles = [], scoreTexts = [], windTrails = [];
         let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
