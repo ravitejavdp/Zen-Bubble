@@ -252,7 +252,7 @@
                 this.active = false;
             }
             update() {
-                if (currentLevel >= 1) {
+                if (currentLevel >= 5) {
                     this.active = true;
                     // Slide in
                     if (this.x > this.targetX) this.x -= 2;
@@ -313,7 +313,7 @@
                 this.bodyColor = '#4a7c44';
             }
              update() {
-                if (currentLevel < 5) return;
+                if (currentLevel < 2) return;
                 
                 // Show lizard on wall
                 this.x = Math.min(this.x + 2, 20);
@@ -355,7 +355,7 @@
                 }
             }
             draw() {
-                if (currentLevel < 5) return;
+                if (currentLevel < 2) return;
 
                 // Draw Tongue
                 if (this.tongueLen > 0 && this.targetBubble) {
@@ -411,8 +411,8 @@
                 this.y -= this.speed;
                 
                 // Wind Physics (Level 2+)
-                if (currentLevel >= 1) {
-                    let windStrength = (currentLevel+1 - 1) * 0.04;
+                if (currentLevel >= 5) {
+                    let windStrength = (currentLevel - 1) * 0.04;
                     
                     // Pull bubbles vertically toward the fan's height (center stream)
                    // this.y += (fan.y - this.y) * 0.025;
