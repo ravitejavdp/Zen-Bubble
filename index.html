@@ -137,8 +137,19 @@
         const gameOverScreen = document.getElementById('game-over');
         const overlay = document.getElementById('overlay');
 
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        let cw, ch;
+        function updateCanvasSize() {
+            cw = canvas.width = window.innerWidth;
+            ch = canvas.height = window.innerHeight;
+        }
+
+        // Initial setup
+        updateCanvasSize();
+
+        window.onload = () => {
+            updateCanvasSize();
+            console.log("Canvas initialized: " + cw + "x" + ch);
+        };
 
         let bubbles = [], particles = [], scoreTexts = [], windTrails = [];
         let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
@@ -227,9 +238,9 @@
         // --- NEW: TABLE FAN CLASS ---
         class TableFan {
             constructor() {
-                this.x = canvas.width + 100;
-                this.targetX = canvas.width - 60;
-                this.y = canvas.height * 0.5;
+                this.x = cw + 100;
+                this.targetX = cw - 60;
+                this.y = ch * 0.5;
                 this.rotation = 0;
                 this.active = false;
             }
@@ -303,7 +314,7 @@
                 if (this.state === 'idle') {
                     // Wander on wall
                     this.y += (this.targetY - this.y) * 0.02;
-                    if (Math.abs(this.y - this.targetY) < 10) this.targetY = Math.random() * (canvas.height - 200) + 100;
+                    if (Math.abs(this.y - this.targetY) < 10) this.targetY = Math.random() * (ch - 200) + 100;
 
                     // Hunter logic
                     if (Math.random() < 0.015) {
@@ -374,11 +385,11 @@
 
         // --- BUBBLE & PARTICLE CLASSES ---
         class Bubble {
-            constructor() { this.reset(); this.y = Math.random() * canvas.height; }
+            constructor() { this.reset(); this.y = Math.random() * ch; }
             reset() {
                 this.radius = Math.random() * 20 + 22;
-                this.x = Math.random() * (canvas.width - 150) + 50;
-                this.y = canvas.height + this.radius + Math.random() * 100;
+                this.x = Math.random() * (cw - 150) + 50;
+                this.y = ch + this.radius + Math.random() * 100;
                 this.speed = (Math.random() * 0.8 + 0.5) * speedMultiplier;
                 this.vx = 0; // Horizontal velocity
                 this.wobbleAngle = Math.random() * Math.PI * 2;
@@ -499,7 +510,7 @@
 
         function animate() {
             if (!gameActive) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, cw, ch);
             zenMeter -= drainRate;
             timerFill.style.width = Math.max(0, zenMeter) + '%';
             if (zenMeter <= 0) { endGame(); return; }
@@ -550,7 +561,7 @@
             totalScore = 0; currentLevel = 1; speedMultiplier = 1; streakMultiplier = 1; zenMeter = 100;
             gameActive = true; popDisplay.innerText = "0"; levelDisplay.innerText = "1"; multDisplay.innerText = "1x";
             gameOverScreen.style.display = 'none';
-            fan.x = canvas.width + 100; fan.active = false;
+            fan.x = cw + 100; fan.active = false;
             hunter.x = -100;
             bubbles.forEach(b => b.reset());
             animate();
@@ -558,7 +569,7 @@
 
         window.addEventListener('mousedown', handlePop);
         window.addEventListener('touchstart', (e) => { handlePop(e); e.preventDefault(); }, {passive: false});
-        window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+        window.addEventListener('resize', updateCanvasSize);
     </script>
 </body>
 </html>
