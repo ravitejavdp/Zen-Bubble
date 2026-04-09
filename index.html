@@ -151,12 +151,7 @@ button {
         const gameOverScreen = document.getElementById('game-over');
         const overlay = document.getElementById('overlay');
 
-            function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        }
-        window.addEventListener('load', resizeCanvas);
-        window.addEventListener('resize', resizeCanvas);
+           
 
         let bubbles = [], particles = [], scoreTexts = [], windTrails = [];
         let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
