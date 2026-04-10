@@ -6,14 +6,15 @@
     <title>ZenBath Pro - Fan Edition</title>
     <style>
          * {
-    -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none; 
-}
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none; 
+        }
         body { 
             margin: 0; overflow: hidden;
-            background: radial-gradient(circle at center, #1a2a6c, #b21f1f, #fdbb2d); 
+            /* Lo-Fi Midnight Twilight Background */
+            background: linear-gradient(-45deg, #0f0c29, #302b63, #24243e, #1a1a2e);
             background-size: 400% 400%;
             animation: gradientBG 15s ease infinite;
             font-family: 'Segoe UI', sans-serif;
@@ -127,6 +128,32 @@
         }
         #game-over { display: none; }
         
+        /* Store / Codex Styles */
+        #store-screen {
+            position: absolute; inset: 0; background: rgba(10, 10, 30, 0.95);
+            display: none; flex-direction: column; align-items: center; 
+            color: white; z-index: 110; backdrop-filter: blur(15px);
+            padding: 40px 20px; overflow-y: auto;
+        }
+        .store-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 20px; width: 100%; max-width: 600px; margin-top: 30px;
+        }
+        .bubble-card {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px; padding: 15px; text-align: center;
+            transition: transform 0.3s;
+        }
+        .bubble-card:hover { transform: translateY(-5px); background: rgba(255, 255, 255, 0.08); }
+        .bubble-card canvas { margin: 0 auto 10px; pointer-events: none; }
+        .bubble-card h3 { margin: 5px 0; font-size: 16px; color: #4ecca3; }
+        .bubble-card p { font-size: 11px; opacity: 0.7; line-height: 1.4; margin: 0; }
+
+        .back-btn {
+            position: sticky; bottom: 20px; margin-top: 40px;
+            background: #4ecca3; color: #1a1a2e;
+        }
+
         button {
             margin-top: 25px; padding: 15px 50px; border: none; border-radius: 50px;
             background: #ffffff; color: #b21f1f; font-weight: 900; cursor: pointer;
@@ -139,9 +166,19 @@
 <body>
     <div id="overlay">
         <h1 style="letter-spacing: 5px;">ZENBATH LO-FI</h1>
-        <p>Vibe with the bubbles. Fan at LVL 2. Hunter at LVL 5.</p>
-        <button onclick="startGame()">START VIBING</button>
+        <p>Vibe with the bubbles. Fan at LVL 5. Hunter at LVL 2.</p>
+        <div style="display: flex; gap: 15px;">
+            <button onclick="startGame()">START VIBING</button>
+            <button onclick="toggleStore(true)" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid white;">STORE</button>
+        </div>
     </div>
+
+    <div id="store-screen">
+        <h1 style="letter-spacing: 3px;">ZEN CODEX</h1>
+        <div class="store-grid" id="store-grid"></div>
+        <button class="back-btn" onclick="toggleStore(false)">GO BACK</button>
+    </div>
+
     <div id="meter-vessel"><div id="timer-bar-fill"></div></div>
 
     <div id="ui-top">
@@ -190,26 +227,96 @@
             ch = canvas.height = window.innerHeight;
         }
 
-        // Initial setup
         updateCanvasSize();
 
         window.onload = () => {
             updateCanvasSize();
-            console.log("Canvas initialized: " + cw + "x" + ch);
         };
 
         let bubbles = [], particles = [], scoreTexts = [], windTrails = [], comboCount = 0, lastPopTime = 0, isMouseDown = false;
+        let timeFreezeTimer = 0, magnetTimer = 0, surgeTimer = 0, lastX = 0, lastY = 0;
+        let storeBubbles = [], storeActive = false, storeReqId = null;
         let totalScore = 0, currentLevel = 1, speedMultiplier = 1;
         let streakMultiplier = 1, zenMeter = 100, gameActive = false, drainRate = 0.06;
         
         let bestScore = localStorage.getItem('zenBathBestScore') || 0;
         bestDisplay.innerText = Number(bestScore).toLocaleString();
 
+        const bubbleSpecs = {
+            'normal': { name: 'Zen Bubble', desc: 'The essence of lofi. Simple points.', color: '#a1c4fd' },
+            'gold': { name: 'Gold Bubble', desc: 'High value. Boosts score and streak.', color: '#FFD700' },
+            'diamond': { name: 'Diamond Bubble', desc: 'Eternal clarity. Massive score & time refill.', color: '#ffffff' },
+            'freeze': { name: 'Time Freeze', desc: 'Chills the vibe. Pauses time drain.', color: '#00ffff' },
+            'magnet': { name: 'Zen Magnet', desc: 'Attracts positivity. Pulls good bubbles to you.', color: '#ff00ff' },
+            'surge': { name: 'Multiplier Surge', desc: 'Electric energy. Locks multiplier at 10x.', color: '#9d00ff' },
+            'split': { name: 'Splitter', desc: 'Chaotic harmony. Bursts into mini-bubbles.', color: '#ff5722' },
+            'trash': { name: 'Gunk', desc: 'The bad vibes. Loses points and time.', color: '#3e2723' }
+        };
+
         const bubbleColors = ['#a1c4fd', '#c2e9fb', '#d4fc79', '#96e6a1', '#84fab0', '#e0c3fc'];
 
-        // --- AUDIO ENGINE ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       
+        function toggleStore(show) {
+            const screen = document.getElementById('store-screen');
+            storeActive = show;
+            screen.style.display = show ? 'flex' : 'none';
+            if (show) {
+                populateStore();
+                storeAnimate();
+            } else {
+                cancelAnimationFrame(storeReqId);
+            }
+        }
+
+        function populateStore() {
+            const grid = document.getElementById('store-grid');
+            grid.innerHTML = '';
+            storeBubbles = [];
+
+            Object.keys(bubbleSpecs).forEach(key => {
+                const spec = bubbleSpecs[key];
+                const card = document.createElement('div');
+                card.className = 'bubble-card';
+                
+                const sCanvas = document.createElement('canvas');
+                sCanvas.width = 100;
+                sCanvas.height = 100;
+                const sCtx = sCanvas.getContext('2d');
+                
+                // Create a static preview bubble
+                const b = new Bubble(50, 50);
+                b.rarity = key;
+                b.color = spec.color;
+                b.x = 50; b.y = 50;
+                b.speed = 0; // Prevent rising
+                b.isStatic = true; 
+                
+                // Match visual properties from reset() logic
+                if (key === 'freeze' || key === 'magnet') b.orbiters = 1;
+                else if (key === 'surge' || key === 'diamond' || key === 'split') b.orbiters = 2;
+                else if (key === 'gold') b.orbiters = 3;
+                if (key === 'split') b.radius = 35;
+                if (key === 'trash') b.radius = 30;
+
+                storeBubbles.push({ b, ctx: sCtx, canvas: sCanvas });
+                
+                card.appendChild(sCanvas);
+                card.insertAdjacentHTML('beforeend', `<h3>${spec.name}</h3><p>${spec.desc}</p>`);
+                grid.appendChild(card);
+            });
+        }
+
+        function storeAnimate() {
+            if (!storeActive) return;
+            storeBubbles.forEach(sb => {
+                sb.ctx.clearRect(0, 0, sb.canvas.width, sb.canvas.height);
+                sb.b.update();
+                sb.b.draw(sb.ctx);
+            });
+            storeReqId = requestAnimationFrame(storeAnimate);
+        }
+
         function playPopSound(type) {
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
@@ -234,7 +341,6 @@
 
         function playHeartbeat() {
             const now = audioCtx.currentTime;
-            // Low frequency "lub-dub" pulse
             [0, 0.25].forEach(delay => {
                 const osc = audioCtx.createOscillator();
                 const g = audioCtx.createGain();
@@ -251,10 +357,9 @@
             document.body.classList.add('screen-shake');
             setTimeout(() => {
                 document.body.classList.remove('screen-shake');
-            }, 150); // Match animation duration
+            }, 150);
         }
 
-        // --- NEW: TABLE FAN CLASS ---
         class TableFan {
             constructor() {
                 this.x = cw + 100;
@@ -264,14 +369,11 @@
                 this.active = false;
             }
             update() {
+                let ts = timeFreezeTimer > 0 ? 0.3 : 1;
                 if (currentLevel >= 5) {
                     this.active = true;
-                    // Slide in
-                    if (this.x > this.targetX) this.x -= 2;
-                    // Rotate blades based on level
-                    this.rotation += 0.1 + (currentLevel * 0.05);
-
-                    // Spawn visual wind trails
+                    if (this.x > this.targetX) this.x -= 2 * ts;
+                    this.rotation += (0.1 + (currentLevel * 0.05)) * ts;
                     if (Math.random() < 0.15) {
                         windTrails.push({
                             x: this.x - 40,
@@ -286,20 +388,14 @@
                 if (!this.active) return;
                 ctx.save();
                 ctx.translate(this.x, this.y);
-
-                // Stand
                 ctx.fillStyle = '#444';
                 ctx.fillRect(-10, 40, 20, 60);
                 ctx.fillRect(-30, 90, 60, 10);
-
-                // Cage
                 ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 ctx.arc(0, 0, 60, 0, Math.PI * 2);
                 ctx.stroke();
-
-                // Blades
                 ctx.rotate(this.rotation);
                 ctx.fillStyle = '#666';
                 for(let i=0; i<3; i++) {
@@ -314,7 +410,6 @@
 
         const fan = new TableFan();
 
-        // --- LIZARD CLASS ---
         class Lizard {
             constructor() {
                 this.x = -100; this.y = 300;
@@ -325,19 +420,13 @@
                 this.bodyColor = '#4a7c44';
             }
              update() {
+                let ts = timeFreezeTimer > 0 ? 0.3 : 1;
                 if (currentLevel < 2) return;
-                
-                // Show lizard on wall
-                this.x = Math.min(this.x + 2, 20);
-
+                this.x = Math.min(this.x + 2 * ts, 20);
                 if (this.state === 'idle') {
-                    // Wander on wall
-                    this.y += (this.targetY - this.y) * 0.02;
+                    this.y += (this.targetY - this.y) * 0.02 * ts;
                     if (Math.abs(this.y - this.targetY) < 10) this.targetY = Math.random() * (ch - 200) + 100;
-
-                    // Hunter logic
                     if (Math.random() < 0.015) {
-                        // Find closest bubble in front of it
                         const targets = bubbles.filter(b =>  b.rarity !== 'trash');
                         if (targets.length > 0) {
                             this.targetBubble = targets[Math.floor(Math.random() * targets.length)];
@@ -349,18 +438,16 @@
                     let dx = this.targetBubble.x - this.x;
                     let dy = this.targetBubble.y - this.y;
                     let dist = Math.hypot(dx, dy);
-                    this.tongueLen += 12;
-
+                    this.tongueLen += 12 * ts;
                     if (this.tongueLen >= dist) {
                         this.targetBubble.reset();
-                        playPopSound('trash'); // Lizard steal sound
-                        triggerScreenShake(); // Trigger screen shake
+                        playPopSound('trash');
+                        triggerScreenShake();
                         this.state = 'returning';
                     }
                 }
-
                 if (this.state === 'returning') {
-                    this.tongueLen -= 15;
+                    this.tongueLen -= 15 * ts;
                     if (this.tongueLen <= 0) {
                         this.tongueLen = 0;
                         this.state = 'idle';
@@ -369,8 +456,6 @@
             }
             draw() {
                 if (currentLevel < 2) return;
-
-                // Draw Tongue
                 if (this.tongueLen > 0 && this.targetBubble) {
                     ctx.strokeStyle = '#ff7b7b';
                     ctx.lineWidth = 4;
@@ -380,8 +465,6 @@
                     ctx.lineTo(this.x + 30 + Math.cos(angle) * this.tongueLen, this.y + Math.sin(angle) * this.tongueLen);
                     ctx.stroke();
                 }
-
-                // Draw Lizard
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 ctx.rotate(Math.sin(Date.now() * 0.005) * 0.1);
@@ -389,7 +472,6 @@
                 ctx.beginPath();
                 ctx.ellipse(0, 0, 40, 18, 0, 0, Math.PI * 2);
                 ctx.fill();
-                // Head
                 ctx.beginPath();
                 ctx.arc(35, -5, 12, 0, Math.PI * 2);
                 ctx.fill();
@@ -403,72 +485,123 @@
 
         const hunter = new Lizard();
 
-        // --- BUBBLE & PARTICLE CLASSES ---
         class Bubble {
-            constructor() { this.reset(); this.y = Math.random() * ch; }
+            constructor(x, y, isMini = false) {
+                this.isMini = isMini;
+                this.toRemove = false;
+                this.isStatic = false;
+                if (isMini) {
+                    this.x = x;
+                    this.y = y;
+                    this.radius = 12;
+                    this.speed = (Math.random() * 0.5 + 1.2) * speedMultiplier;
+                    this.vx = (Math.random() - 0.5) * 4;
+                    this.color = '#ff5722';
+                    this.rarity = 'mini';
+                    this.points = 2;
+                    this.wobbleAngle = Math.random() * Math.PI * 2;
+                    this.popCooldown = 15; // Frames before mini bubble can be popped
+                } else {
+                    this.popCooldown = 0;
+                    this.reset();
+                    this.y = Math.random() * ch;
+                }
+            }
             reset() {
                 this.radius = Math.random() * 20 + 22;
                 this.x = Math.random() * (cw - 150) + 50;
                 this.y = ch + this.radius + Math.random() * 100;
                 this.speed = (Math.random() * 0.8 + 0.5) * speedMultiplier;
-                this.vx = 0; // Horizontal velocity
+                this.popCooldown = 0;
+                this.vx = 0;
                 this.wobbleAngle = Math.random() * Math.PI * 2;
                 this.orbitAngle = Math.random() * Math.PI * 2;
+                
+                // Only allow one specialty bubble (not normal, trash, or mini) on screen at a time
+                const specialtyActive = bubbles.some(b => b !== this && !['normal', 'trash', 'mini'].includes(b.rarity));
                 const rand = Math.random();
-                if (rand < 0.03) { this.rarity = 'diamond'; this.color = '#ffffff'; this.points = 50;this.orbiters = 2; }
-                else if (rand < 0.10) { this.rarity = 'gold'; this.color = '#FFD700'; this.points = 25; this.orbiters = 3; }
-                else if (rand < 0.28) { this.rarity = 'trash'; this.color = '#3e2723'; this.points = -100; this.radius = 35; }
-                else { this.rarity = 'normal'; this.color = bubbleColors[Math.floor(Math.random() * bubbleColors.length)]; this.points = 5; }
+
+                if (rand < 0.15) { // 15% chance for Trash hazard
+                    this.rarity = 'trash'; this.color = '#3e2723'; this.points = -100; this.radius = 35;
+                } else if (!specialtyActive && rand < 0.28) { // specialty chance
+                    // Level-based unlocks for Specialty Bubbles
+                    if (currentLevel >= 7 && Math.random() < 0.1) { this.rarity = 'diamond'; this.color = '#ffffff'; this.points = 50; this.orbiters = 2; }
+                    else if (currentLevel >= 6 && Math.random() < 0.15) { this.rarity = 'surge'; this.color = '#9d00ff'; this.points = 15; this.orbiters = 2; }
+                    else if (currentLevel >= 4 && Math.random() < 0.2) { this.rarity = 'magnet'; this.color = '#ff00ff'; this.points = 10; this.orbiters = 1; }
+                    else if (currentLevel >= 3 && Math.random() < 0.25) { this.rarity = 'freeze'; this.color = '#00ffff'; this.points = 10; this.orbiters = 1; }
+                    else if (currentLevel >= 2 && Math.random() < 0.3) { this.rarity = 'split'; this.color = '#ff5722'; this.points = 15; this.radius = 45; }
+                    else { this.rarity = 'gold'; this.color = '#FFD700'; this.points = 25; this.orbiters = 3; }
+                } else {
+                    // Default to Normal Bubble
+                    this.rarity = 'normal';
+                    this.color = bubbleColors[Math.floor(Math.random() * bubbleColors.length)];
+                    this.points = 5;
+                }
             }
             update() {
-                this.y -= this.speed;
-                
-                // Wind Physics (Level 2+)
-                if (currentLevel >= 5) {
-                    let windStrength = (currentLevel - 1) * 0.04;
+                let ts = timeFreezeTimer > 0 ? 0.3 : 1;
+                if (this.isStatic) ts = 1; // Keep store animations smooth
+                if (this.popCooldown > 0) this.popCooldown--;
+
+                if (!this.isStatic) {
+                    this.y -= this.speed * ts;
+                    if (this.isMini) this.x += this.vx * ts;
                     
-                    // Pull bubbles vertically toward the fan's height (center stream)
-                   // this.y += (fan.y - this.y) * 0.025;
-                    // Apply horizontal wind only when bubble is at or above fan's y position
-                    if (this.y <= fan.y) {
-                        this.vx -= windStrength; // Accelerate left
-                        this.x += this.vx;
+                    // Magnet Logic: Attracts all bubbles EXCEPT trash bubbles
+                    if (magnetTimer > 0 && lastX !== 0 && this.rarity !== 'trash') {
+                        let dx = lastX - this.x;
+                        let dy = lastY - this.y;
+                        let dist = Math.hypot(dx, dy);
+                        if (dist > 1 && dist < 500) {
+                            this.x += (dx / dist) * 5 * ts;
+                            this.y += (dy / dist) * 5 * ts;
+                        }
                     }
+                    if (currentLevel >= 5) {
+                        let windStrength = (currentLevel - 1) * 0.04 * ts;
+                        if (this.y <= fan.y) {
+                            this.vx -= windStrength;
+                            this.x += this.vx;
+                        }
+                    }
+                    this.x += Math.sin(this.y / 60) * 0.5 * ts;
                 }
 
-                this.x += Math.sin(this.y / 60) * 0.5;
-                this.wobbleAngle += 0.02; this.orbitAngle += 0.05;
-                if (this.y < -this.radius || this.x < -this.radius) this.reset();
+                this.wobbleAngle += 0.02 * ts; 
+                this.orbitAngle += 0.05 * ts;
+                if (!this.isStatic && (this.y < -this.radius || this.x < -this.radius || this.x > cw + this.radius)) {
+                    if (this.isMini) this.toRemove = true;
+                    else this.reset();
+                }
             }
-             draw() {
-                ctx.save();
+             draw(targetCtx = ctx) {
+                targetCtx.save();
                 let r = this.radius;
                 if (this.rarity !== 'normal' && this.rarity !== 'trash') {
                     r += Math.sin(this.wobbleAngle) * 2;
-                    ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+                    targetCtx.shadowBlur = 15; targetCtx.shadowColor = this.color;
                     for (let i = 0; i < this.orbiters; i++) {
                         let a = this.orbitAngle + (i * (Math.PI * 2 / this.orbiters));
                         let ox = this.x + Math.cos(a) * (this.radius + 18);
                         let oy = this.y + Math.sin(a) * (this.radius + 18);
-                        ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(ox, oy, 3, 0, Math.PI*2); ctx.fill();
+                        targetCtx.fillStyle = "white"; targetCtx.beginPath(); targetCtx.arc(ox, oy, 3, 0, Math.PI*2); targetCtx.fill();
                     }
                 }
-                ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
-                let grad = ctx.createRadialGradient(this.x - r/3, this.y - r/3, 0, this.x, this.y, r);
+                targetCtx.beginPath(); targetCtx.arc(this.x, this.y, r, 0, Math.PI * 2);
+                let grad = targetCtx.createRadialGradient(this.x - r/3, this.y - r/3, 0, this.x, this.y, r);
                 if (this.rarity === 'trash') {
                     grad.addColorStop(0, '#8d6e63');
                     grad.addColorStop(1, '#3e2723');
-                    ctx.fillStyle = grad;
-                    ctx.fill();
-                    // Trash "Dirt" Inside
-                    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-                    ctx.fillRect(this.x - 5, this.y - 5, 4, 4);
-                    ctx.fillRect(this.x + 6, this.y + 2, 3, 3);
-                    }
-                else { grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, this.color + 'aa'); 
-                        ctx.fillStyle = grad; ctx.fill();}
-                
-                 ctx.restore();
+                    targetCtx.fillStyle = grad;
+                    targetCtx.fill();
+                    targetCtx.fillStyle = 'rgba(0,0,0,0.4)';
+                    targetCtx.fillRect(this.x - 5, this.y - 5, 4, 4);
+                    targetCtx.fillRect(this.x + 6, this.y + 2, 3, 3);
+                } else { 
+                    grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, this.color + 'aa'); 
+                    targetCtx.fillStyle = grad; targetCtx.fill();
+                }
+                 targetCtx.restore();
             }
         }
 
@@ -487,7 +620,6 @@
                 if (this.isTrail) {
                     ctx.shadowBlur = 8;
                     ctx.shadowColor = this.color;
-                    // Texture: Small diamond/star shape for sparkles
                     ctx.translate(this.x, this.y);
                     ctx.rotate(Math.PI / 4);
                     ctx.fillRect(-this.size, -this.size, this.size * 2, this.size * 2);
@@ -508,60 +640,56 @@
             }
         }
 
-        // --- GAME LOOP ---
         function handlePop(e) {
             if (!gameActive) return;
             const x = e.clientX || (e.touches && e.touches[0].clientX);
             const y = e.clientY || (e.touches && e.touches[0].clientY);
-
-        // Visual Trail Effect: Spawn a subtle sparkle at the interaction point
-        if (x !== undefined && y !== undefined) {
+            if (x === undefined || y === undefined) return;
+            lastX = x; lastY = y;
             particles.push(new Particle(x, y, '#e0ffff', true));
-        }
-
             bubbles.forEach((b) => {
                 if (Math.hypot(x - b.x, y - b.y) < b.radius + 15) {
+                    if (b.popCooldown > 0) return; // Skip if still in cooldown phase
+
                     if (b.rarity === 'trash') playPopSound('trash');
                     else if (b.rarity === 'normal') playPopSound('normal');
                     else playPopSound('special');
 
-                    // Combo Logic
                     const now = Date.now();
-                    if (now - lastPopTime < 600) {
-                        comboCount++;
-                    } else {
-                        comboCount = 1;
-                    }
+                    if (now - lastPopTime < 600) comboCount++;
+                    else comboCount = 1;
                     lastPopTime = now;
+
+                    if (b.rarity === 'freeze') timeFreezeTimer = 300;
+                    if (b.rarity === 'magnet') magnetTimer = 300;
+                    if (b.rarity === 'surge') surgeTimer = 300;
+
+                    if (b.rarity === 'split') {
+                        for(let i=0; i<4; i++) {
+                            // Spawn with slight offset so they don't look like a single bubble
+                            bubbles.push(new Bubble(b.x + (Math.random()-0.5)*10, b.y + (Math.random()-0.5)*10, true));
+                        }
+                    }
 
                     if (comboCount > 1) {
                         scoreTexts.push(new ScoreText(x, y - 70, comboCount + "x COMBO", "#FFD700", 38));
                     }
 
                     if (b.rarity === 'normal') { streakMultiplier = 1; multDisplay.classList.remove('active-streak'); }
-                    else if (b.rarity === 'trash') { streakMultiplier = 1; zenMeter -= 25; multDisplay.classList.remove('active-streak'); }
+                    else if (b.rarity === 'trash') { streakMultiplier = 1; zenMeter -= 25; multDisplay.classList.remove('active-streak'); triggerScreenShake(); }
                     else { streakMultiplier *= 2; multDisplay.classList.add('active-streak'); }
 
-                    // Trigger screen shake for trash bubbles
-                    if (b.rarity === 'trash') triggerScreenShake();
-
-                    multDisplay.innerText = streakMultiplier + "x";
-                    
-                    let pts;
-                    if (b.rarity === 'trash') {
-                        pts = b.points; // Trash bubbles always give base negative points
-                    } else {
-                        pts = b.points * streakMultiplier * comboCount; // Apply both streak and combo multipliers
-                    }
+                    let effectiveMult = surgeTimer > 0 ? 10 : streakMultiplier;
+                    multDisplay.innerText = effectiveMult + "x";
+                    let pts = b.rarity === 'trash' ? b.points : (b.points * effectiveMult * comboCount);
                     totalScore = Math.max(0, totalScore + pts);
                     popDisplay.innerText = totalScore.toLocaleString();
                     scoreTexts.push(new ScoreText(b.x, b.y - 30, (pts >= 0 ? "+" : "") + pts, b.color));
                     
                     if (b.rarity !== 'trash') {
                         zenMeter = Math.min(100, zenMeter + (b.rarity === 'diamond' ? 40 : 12));
-                        // Trigger background flash
                         document.body.classList.remove('flash-hit');
-                        void document.body.offsetWidth; // Force reflow to restart animation
+                        void document.body.offsetWidth; 
                         document.body.classList.add('flash-hit');
                     }
                     for (let i = 0; i < 15; i++) particles.push(new Particle(b.x, b.y, b.color));
@@ -573,7 +701,8 @@
                         const msg = document.getElementById('level-up-msg');
                         msg.style.opacity = '1'; setTimeout(() => msg.style.opacity = '0', 1200);
                     }
-                    b.reset();
+                    if (b.isMini) b.toRemove = true;
+                    else b.reset();
                 }
             });
         }
@@ -581,15 +710,28 @@
         function animate() {
             if (!gameActive) return;
             ctx.clearRect(0, 0, cw, ch);
-            zenMeter -= drainRate;
+            let filters = [];
+            if (timeFreezeTimer > 0) {
+                timeFreezeTimer--;
+                filters.push("hue-rotate(180deg) brightness(1.2) saturate(1.5)");
+            } else {
+                zenMeter -= drainRate;
+            }
+            if (magnetTimer > 0) {
+                magnetTimer--;
+                filters.push("drop-shadow(0 0 10px #ff00ff)");
+            }
+            if (surgeTimer > 0) {
+                surgeTimer--;
+                filters.push("drop-shadow(0 0 10px #bf00ff)");
+            }
+            timerFill.style.filter = filters.join(" ");
             timerFill.style.width = Math.max(0, zenMeter) + '%';
 
-            // Update UI State based on timer
             if (zenMeter < 40) {
                 timerFill.classList.add('critical');
                 timerFill.classList.remove('warning');
                 meterVessel.classList.add('vibrate');
-
                 if (audioCtx.currentTime - lastHeartbeat > 0.8) {
                     playHeartbeat();
                     lastHeartbeat = audioCtx.currentTime;
@@ -605,7 +747,6 @@
 
             if (zenMeter <= 0) { endGame(); return; }
 
-            // Update Air Trails
             for(let i = windTrails.length - 1; i >= 0; i--) {
                 let w = windTrails[i];
                 w.x -= 8 + (currentLevel * 2);
@@ -619,7 +760,8 @@
             fan.draw();
             hunter.update();
             hunter.draw();
-            bubbles.forEach(b => { b.update(); b.draw(); });
+            bubbles.forEach(b => { b.update(); b.draw(ctx); });
+            bubbles = bubbles.filter(b => !b.toRemove);
             particles.forEach(p => p.update());
             particles = particles.filter(p => p.life > 0);
             particles.forEach(p => p.draw());
@@ -638,13 +780,12 @@
                 localStorage.setItem('zenBathBestScore', bestScore);
                 bestDisplay.innerText = totalScore.toLocaleString();
                 recordMsg.style.display = 'block';
-            } else { recordMsg.style.display = 'none'; }
+            } else recordMsg.style.display = 'none';
             gameOverScreen.style.display = 'flex';
         }
 
         function startGame() {
             audioCtx.resume();
-           // initLoFiEngine();
             overlay.style.display = 'none';
             gameActive = true;
             bubbles = Array.from({length: 18}, () => new Bubble());
@@ -652,7 +793,7 @@
         }
 
         function resetGame() {
-            totalScore = 0; currentLevel = 1; speedMultiplier = 1; streakMultiplier = 1; zenMeter = 100; comboCount = 0; lastPopTime = 0; drainRate = 0.06;
+            totalScore = 0; currentLevel = 1; speedMultiplier = 1; streakMultiplier = 1; zenMeter = 100; comboCount = 0; lastPopTime = 0; drainRate = 0.06; timeFreezeTimer = 0; magnetTimer = 0; surgeTimer = 0; lastX = 0; lastY = 0;
             gameActive = true; popDisplay.innerText = "0"; levelDisplay.innerText = "1"; multDisplay.innerText = "1x";
             gameOverScreen.style.display = 'none';
             timerFill.classList.remove('warning', 'critical');
@@ -668,25 +809,18 @@
             isMouseDown = true;
             handlePop(e);
         });
-
         window.addEventListener('mousemove', (e) => {
             if (isMouseDown) handlePop(e);
         });
-
-        window.addEventListener('mouseup', () => {
-            isMouseDown = false;
-        });
-
+        window.addEventListener('mouseup', () => { isMouseDown = false; });
         window.addEventListener('touchstart', (e) => {
             if (e.target.tagName === 'BUTTON') return;
             handlePop(e);
         }, { passive: true });
-
         window.addEventListener('touchmove', (e) => {
             if (e.target.tagName === 'BUTTON') return;
             handlePop(e);
         }, { passive: true });
-
         window.addEventListener('resize', updateCanvasSize);
     </script>
 </body>
