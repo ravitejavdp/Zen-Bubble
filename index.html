@@ -265,22 +265,8 @@
         const gameOverScreen = document.getElementById('game-over');
         const overlay = document.getElementById('overlay');
 
+        // --- GLOBAL STATE ---
         let cw, ch, lastHeartbeat = 0;
-        function updateCanvasSize() {
-            cw = canvas.width = window.innerWidth;
-            ch = canvas.height = window.innerHeight;
-        }
-
-        window.onload = () => {
-            // Multiple attempts to capture size for slower WebViews
-            updateCanvasSize();
-            setTimeout(updateCanvasSize, 100);
-        };
-
-        // Initial call
-        updateCanvasSize();
-        updateToggleUI();
-
         let bubbles = [], particles = [], scoreTexts = [], windTrails = [], comboCount = 0, lastPopTime = 0, isMouseDown = false;
         let timeFreezeTimer = 0, magnetTimer = 0, surgeTimer = 0, lastX = 0, lastY = 0;
         let storeBubbles = [], storeActive = false, storeReqId = null;
@@ -293,6 +279,42 @@
 
         let bestScore = localStorage.getItem('zenBathBestScore') || 0;
         bestDisplay.innerText = Number(bestScore).toLocaleString();
+
+        // --- HAPTICS / VIBRATION BRIDGE ---
+        function triggerVibration(pattern = 50) {
+            // 1. Try Native Android Bridge first (if implemented in Java)
+            if (window.AndroidInterface && window.AndroidInterface.vibrate) {
+                window.AndroidInterface.vibrate(Array.isArray(pattern) ? pattern[0] : pattern);
+            }
+            // 2. Fallback to Web Vibration API
+            else if (navigator.vibrate) {
+                navigator.vibrate(pattern);
+            }
+        }
+
+        function updateCanvasSize() {
+            cw = canvas.width = window.innerWidth;
+            ch = canvas.height = window.innerHeight;
+        }
+
+        // Reorganized Init: Call this AFTER variables are declared
+        function initApp() {
+            updateCanvasSize();
+
+            // Check status on load if bridge exists
+            if (window.AndroidInterface && window.AndroidInterface.checkIsPurchased) {
+                if (window.AndroidInterface.checkIsPurchased("zen_mode_permanent")) {
+                    zenModePurchased = true;
+                    localStorage.setItem('zenModePurchased', 'true');
+                }
+            }
+            updateToggleUI();
+        }
+
+        window.onload = () => {
+            initApp();
+            setTimeout(updateCanvasSize, 100); // Layout safety for WebViews
+        };
 
         const bubbleSpecs = {
             'normal': { name: 'Zen Bubble', desc: 'The essence of lofi. Simple points.', color: '#a1c4fd' },
@@ -361,14 +383,6 @@
                 localStorage.setItem('zenModePurchased', 'true');
                 updateToggleUI();
                 alert("Enlightenment Achieved! Zen Mode Unlocked.");
-            }
-        }
-
-        // Check status on load if bridge exists
-        if (window.AndroidInterface) {
-            if (window.AndroidInterface.checkIsPurchased("zen_mode_permanent")) {
-                zenModePurchased = true;
-                localStorage.setItem('zenModePurchased', 'true');
             }
         }
 
@@ -475,6 +489,7 @@
 
         function triggerScreenShake() {
             document.body.classList.add('screen-shake');
+            triggerVibration(40); // Light haptic feedback
             setTimeout(() => {
                 document.body.classList.remove('screen-shake');
             }, 150);
@@ -485,6 +500,7 @@
             voidX = x; voidY = y;
             blackHoleActive = true;
             canvas.classList.add('game-explode');
+            triggerVibration([100, 50, 200]); // "Thump" vibration pattern
             playPopSound('trash');
             setTimeout(() => {
                 canvas.classList.remove('game-explode');
@@ -846,7 +862,7 @@
                     }
 
                     if (b.rarity === 'normal') { streakMultiplier = 1; multDisplay.classList.remove('active-streak'); }
-                    else if (b.rarity === 'trash') { streakMultiplier = 1; zenMeter -= 25; multDisplay.classList.remove('active-streak'); triggerScreenShake(); }
+                    else if (b.rarity === 'trash') { streakMultiplier = 1; zenMeter -= 25; multDisplay.classList.remove('active-streak'); triggerScreenShake(); triggerVibration(80); }
                     else { streakMultiplier *= 2; multDisplay.classList.add('active-streak'); }
 
                     let effectiveMult = surgeTimer > 0 ? 10 : streakMultiplier;
